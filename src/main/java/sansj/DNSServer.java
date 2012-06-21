@@ -46,7 +46,14 @@ public class DNSServer {
 		final DatagramSocket serverSocket = new DatagramSocket(port);
 		byte[] data = new byte[1024];
 
+		
+		long lastUpdated = System.currentTimeMillis();
+		
 		while (true) {
+			
+			if(lastUpdated + reloadInterval > System.currentTimeMillis()){
+				loadDB();
+			}
 
 			DatagramPacket packet = new DatagramPacket(data, data.length);
 			serverSocket.receive(packet);
