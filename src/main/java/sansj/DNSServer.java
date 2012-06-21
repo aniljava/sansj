@@ -17,17 +17,37 @@ import com.google.common.net.InternetDomainName;
 public class DNSServer {
 
 	public static void main(String args[]) throws Exception {
-		new DNSServer().execute();
+		DNSServer server = new DNSServer();
+		if (args.length >= 1) {
+			server.configFolder = args[0];
+		}
+
+		if (args.length > 1) {
+			server.reloadInterval = Integer.parseInt(args[1]);
+		}
+
+		if(args.length > 2){
+			server.port = Integer.parseInt(args[2]);
+		}
+		
+		
+		server.execute();
 	}
+
+	public long		reloadInterval	= 5 * 60 * 1000;	// Every Five minutes
+	public String	configFolder	= "config";
+	public int		port			= 53;
+	
 
 	public void execute() throws Exception {
 		loadDB();
 
 		@SuppressWarnings("resource")
-		final DatagramSocket serverSocket = new DatagramSocket(53);
+		final DatagramSocket serverSocket = new DatagramSocket(port);
 		byte[] data = new byte[1024];
 
 		while (true) {
+
 			DatagramPacket packet = new DatagramPacket(data, data.length);
 			serverSocket.receive(packet);
 			data = packet.getData();
@@ -242,11 +262,11 @@ public class DNSServer {
 	}
 
 	public void loadDB() throws Exception {
-		if (!new File("config").exists()) {
+		if (!new File(configFolder).exists()) {
 			return;
 		}
 
-		File[] files = new File("config").listFiles(new FilenameFilter() {
+		File[] files = new File(configFolder).listFiles(new FilenameFilter() {
 
 			@Override
 			public boolean accept(File dir, String name) {
