@@ -31,7 +31,7 @@
 					</descriptorRefs>
 					<archive>
 						<manifest>
-							<mainClass>edu.unt.mgsv.uploader.UploadFile</mainClass>
+							<mainClass>sansj.DNSServer</mainClass>
 						</manifest>
 					</archive>
 				</configuration>
