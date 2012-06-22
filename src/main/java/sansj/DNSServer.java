@@ -26,18 +26,16 @@ public class DNSServer {
 			server.reloadInterval = Integer.parseInt(args[1]);
 		}
 
-		if(args.length > 2){
+		if (args.length > 2) {
 			server.port = Integer.parseInt(args[2]);
 		}
-		
-		
+
 		server.execute();
 	}
 
 	public long		reloadInterval	= 5 * 60 * 1000;	// Every Five minutes
 	public String	configFolder	= "config";
 	public int		port			= 53;
-	
 
 	public void execute() throws Exception {
 		loadDB();
@@ -46,210 +44,214 @@ public class DNSServer {
 		final DatagramSocket serverSocket = new DatagramSocket(port);
 		byte[] data = new byte[1024];
 
-		
 		long lastUpdated = System.currentTimeMillis();
-		
+
 		while (true) {
-			
-			if(lastUpdated + reloadInterval > System.currentTimeMillis()){
+
+			if (lastUpdated + reloadInterval > System.currentTimeMillis()) {
 				loadDB();
 			}
 
-			DatagramPacket packet = new DatagramPacket(data, data.length);
-			serverSocket.receive(packet);
-			data = packet.getData();
+			try {
+				DatagramPacket packet = new DatagramPacket(data, data.length);
+				serverSocket.receive(packet);
+				data = packet.getData();
 
-			int length = packet.getLength();
+				int length = packet.getLength();
 
-			byte[] qname = new byte[length - 16];
-			System.arraycopy(data, 12, qname, 0, length - 16);
+				byte[] qname = new byte[length - 16];
+				System.arraycopy(data, 12, qname, 0, length - 16);
 
-			byte[] qtype = new byte[] { data[length - 4], data[length - 3] };
-			byte[] qclass = new byte[] { data[length - 2], data[length - 1] };
+				byte[] qtype = new byte[] { data[length - 4], data[length - 3] };
+				byte[] qclass = new byte[] { data[length - 2], data[length - 1] };
 
-			String query = qnameToDomain(qname);
-			String type = getQType(qtype);
-			String zone = getZone(query);
+				String query = qnameToDomain(qname);
+				String type = getQType(qtype);
+				String zone = getZone(query);
 
-			ByteBuffer response = ByteBuffer.allocate(512);
+				ByteBuffer response = ByteBuffer.allocate(512);
 
-			// Copy request id
-			response.put((byte) data[0]);
-			response.put((byte) data[1]);
+				// Copy request id
+				response.put((byte) data[0]);
+				response.put((byte) data[1]);
 
-			response.put((byte) ((1 << 7) | 4));// 10000100
+				response.put((byte) ((1 << 7) | 4));// 10000100
 
-			boolean error = false;
-			switch (type) {
-			case "a": {
-				Map result = (Map) getData(zone, type);
-				if (result == null) {
-					error = true;
+				boolean error = false;
+				switch (type) {
+				case "a": {
+					Map result = (Map) getData(zone, type);
+					if (result == null) {
+						error = true;
+						break;
+					}
+
+					List<List<Object>> ARecords = (List<List<Object>>) result.get(query);
+					if (ARecords == null || ARecords.isEmpty()) {
+						// TODO CHECK CNAME BEFORE THROWING ERROR.
+						error = true;
+						break;
+					}
+					response.put((byte) 0); // NO ERROR
+					response.putShort((short) 1); // QDCOUNT
+					response.putShort((short) ARecords.size()); // ANCOUNT
+
+					List<List> authority = (List<List>) getData(zone, "ns");
+					if (authority != null && authority.size() > 0) {
+						response.putShort((short) authority.size()); // NSCOUNT
+					} else {
+						response.putShort((short) 0); // NSCOUNT
+					}
+					response.putShort((short) 0); // ARCOUNT
+
+					// Question Part
+					response.put(qname);
+					response.put(qtype);
+					response.put(qclass);
+
+					for (List<Object> record : ARecords) {
+						// Pointer to answer part
+						response.put((byte) 0xc0);
+						response.put((byte) 0x0c);
+
+						response.putShort((short) 1);// TYPE A
+						response.putShort((short) 1);// CLASS IN
+
+						int ttl = (int) record.get(0);
+						String ip = (String) record.get(1);
+
+						response.putInt(ttl);
+
+						response.putShort((short) 4);
+
+						byte[] address = Inet4Address.getByName(ip).getAddress();
+						response.put(address);
+					}
+
+					if (authority != null && !authority.isEmpty()) {
+
+						for (List auth : authority) {
+							response.put(domainToQname(zone + "."));
+							response.putShort((short) 2); // NS
+							response.put(qclass); // IN
+
+							int ttl = (int) auth.get(0);
+							String cname = (String) auth.get(1);
+
+							byte[] cnameQname = domainToQname(cname);
+
+							response.putInt(ttl);
+							response.putShort((short) (cnameQname.length)); // TODO
+
+							response.put(cnameQname);
+						}
+					}
+
+				}
 					break;
-				}
+				case "mx": {
+					List<List<Object>> mxData = (List<List<Object>>) getData(zone, type);
 
-				List<List<Object>> ARecords = (List<List<Object>>) result.get(query);
-				if (ARecords == null || ARecords.isEmpty()) {
-					// TODO CHECK CNAME BEFORE THROWING ERROR.
-					error = true;
-					break;
-				}
-				response.put((byte) 0); // NO ERROR
-				response.putShort((short) 1); // QDCOUNT
-				response.putShort((short) ARecords.size()); // ANCOUNT
+					if (mxData == null || mxData.isEmpty()) {
+						error = true;
+						break;
+					}
 
-				List<List> authority = (List<List>) getData(zone, "ns");
-				if (authority != null && authority.size() > 0) {
-					response.putShort((short) authority.size()); // NSCOUNT
-				} else {
-					response.putShort((short) 0); // NSCOUNT
-				}
-				response.putShort((short) 0); // ARCOUNT
+					response.put((byte) 0); // 0-000-0000 TODO replace last 0000
+											// with error code.
 
-				// Question Part
-				response.put(qname);
-				response.put(qtype);
-				response.put(qclass);
+					response.putShort((short) 1); // QDCOUNT
+					response.putShort((short) mxData.size()); // ANCOUNT
 
-				for (List<Object> record : ARecords) {
-					// Pointer to answer part
-					response.put((byte) 0xc0);
-					response.put((byte) 0x0c);
+					List<List> authority = (List<List>) getData(zone, "ns");
+					if (authority != null && authority.size() > 0) {
+						response.putShort((short) authority.size()); // NSCOUNT
+					} else {
+						response.putShort((short) 0); // NSCOUNT
+					}
 
-					response.putShort((short) 1);// TYPE A
-					response.putShort((short) 1);// CLASS IN
+					response.putShort((short) 0); // ARCOUNT
 
-					int ttl = (int) record.get(0);
-					String ip = (String) record.get(1);
+					// NAME RECORD.
+					response.put(qname);
+					response.put(qtype);
+					response.put(qclass);
 
-					response.putInt(ttl);
+					for (List<Object> record : mxData) {
 
-					response.putShort((short) 4);
+						// NAME Pointer to above NAME RECORD
+						response.put((byte) 0xc0);
+						response.put((byte) 0x0c);
 
-					byte[] address = Inet4Address.getByName(ip).getAddress();
-					response.put(address);
-				}
+						response.putShort((short) 15);// TYPE MX
+						response.putShort((short) 1); // CLASS IN
 
-				if (authority != null && !authority.isEmpty()) {
-
-					for (List auth : authority) {
-						response.put(domainToQname(zone + "."));
-						response.putShort((short) 2); // NS
-						response.put(qclass); // IN
-
-						int ttl = (int) auth.get(0);
-						String cname = (String) auth.get(1);
+						int ttl = (int) record.get(0);
+						int priority = (int) record.get(1);
+						String cname = (String) record.get(2);
 
 						byte[] cnameQname = domainToQname(cname);
 
 						response.putInt(ttl);
-						response.putShort((short) (cnameQname.length)); // TODO
 
+						response.putShort((short) (cnameQname.length + 2)); // TODO
+
+						// byte[] address =
+						// Inet4Address.getByName(ip).getAddress();
+						response.putShort((short) priority);
 						response.put(cnameQname);
 					}
+
+					if (authority != null && !authority.isEmpty()) {
+
+						for (List auth : authority) {
+							response.put(domainToQname(zone + "."));
+							response.putShort((short) 2); // NS
+							response.put(qclass); // IN
+
+							int ttl = (int) auth.get(0);
+							String cname = (String) auth.get(1);
+
+							byte[] cnameQname = domainToQname(cname);
+
+							response.putInt(ttl);
+							response.putShort((short) (cnameQname.length)); // TODO
+
+							response.put(cnameQname);
+						}
+					}
+
 				}
-
-			}
-				break;
-			case "mx": {
-				List<List<Object>> mxData = (List<List<Object>>) getData(zone, type);
-
-				if (mxData == null || mxData.isEmpty()) {
-					error = true;
+					break;
+				case "ns":
+					response.put((byte) 3); // 0-000-0011 NAME ERROR
+					break;
+				case "txt":
+					response.put((byte) 3); // 0-000-0011 NAME ERROR
+					break;
+				default:
+					response.put((byte) 3); // 0-000-0011 NAME ERROR
 					break;
 				}
 
-				response.put((byte) 0); // 0-000-0000 TODO replace last 0000
-										// with error code.
-
-				response.putShort((short) 1); // QDCOUNT
-				response.putShort((short) mxData.size()); // ANCOUNT
-
-				List<List> authority = (List<List>) getData(zone, "ns");
-				if (authority != null && authority.size() > 0) {
-					response.putShort((short) authority.size()); // NSCOUNT
-				} else {
+				if (error) {
+					response.put((byte) 0); // 0-000-0011 NAME ERROR
+					response.putShort((short) 1); // QDCOUNT
+					response.putShort((short) 0); // ANCOUNT
 					response.putShort((short) 0); // NSCOUNT
+					response.putShort((short) 0); // ARCOUNT
+
+					// NAME RECORD.
+					response.put(qname);
+					response.put(qtype);
+					response.put(qclass);
+
 				}
-
-				response.putShort((short) 0); // ARCOUNT
-
-				// NAME RECORD.
-				response.put(qname);
-				response.put(qtype);
-				response.put(qclass);
-
-				for (List<Object> record : mxData) {
-
-					// NAME Pointer to above NAME RECORD
-					response.put((byte) 0xc0);
-					response.put((byte) 0x0c);
-
-					response.putShort((short) 15);// TYPE MX
-					response.putShort((short) 1); // CLASS IN
-
-					int ttl = (int) record.get(0);
-					int priority = (int) record.get(1);
-					String cname = (String) record.get(2);
-
-					byte[] cnameQname = domainToQname(cname);
-
-					response.putInt(ttl);
-
-					response.putShort((short) (cnameQname.length + 2)); // TODO
-
-					// byte[] address = Inet4Address.getByName(ip).getAddress();
-					response.putShort((short) priority);
-					response.put(cnameQname);
-				}
-
-				if (authority != null && !authority.isEmpty()) {
-
-					for (List auth : authority) {
-						response.put(domainToQname(zone + "."));
-						response.putShort((short) 2); // NS
-						response.put(qclass); // IN
-
-						int ttl = (int) auth.get(0);
-						String cname = (String) auth.get(1);
-
-						byte[] cnameQname = domainToQname(cname);
-
-						response.putInt(ttl);
-						response.putShort((short) (cnameQname.length)); // TODO
-
-						response.put(cnameQname);
-					}
-				}
-
+				DatagramPacket responsePacket = new DatagramPacket(response.array(), response.position(), packet.getAddress(), packet.getPort());
+				serverSocket.send(responsePacket);
+			} catch (Exception ex) {
+				//ex.printStackTrace(System.err);
 			}
-				break;
-			case "ns":
-				response.put((byte) 3); // 0-000-0011 NAME ERROR
-				break;
-			case "txt":
-				response.put((byte) 3); // 0-000-0011 NAME ERROR
-				break;
-			default:
-				response.put((byte) 3); // 0-000-0011 NAME ERROR
-				break;
-			}
-
-			if (error) {
-				response.put((byte) 0); // 0-000-0011 NAME ERROR
-				response.putShort((short) 1); // QDCOUNT
-				response.putShort((short) 0); // ANCOUNT
-				response.putShort((short) 0); // NSCOUNT
-				response.putShort((short) 0); // ARCOUNT
-
-				// NAME RECORD.
-				response.put(qname);
-				response.put(qtype);
-				response.put(qclass);
-
-			}
-			DatagramPacket responsePacket = new DatagramPacket(response.array(), response.position(), packet.getAddress(), packet.getPort());
-			serverSocket.send(responsePacket);
 		}
 	}
 

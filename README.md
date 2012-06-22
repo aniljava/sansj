@@ -40,5 +40,6 @@ Simple Authoritative Name Server - Java
 
 ##Running
 
-    #sudo java -jar sansj-1.0RC1-jar-with-dependencies.jar <config-folder | config> <reload-ms | 300000> <port | 53>
-    
+    # sudo java -jar sansj-1.0RC1-jar-with-dependencies.jar <config> <reloadInterval> <port>
+    ## DEFAULT IS
+    # sudo java -jar sansj-1.0RC1-jar-with-dependencies.jar config 300000 53
