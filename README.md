@@ -19,21 +19,24 @@ Simple Authoritative Name Server - Java
 
 	{
 	    "zone":"aniljava.com", 
-	    "data":{	        
-	        "mx":[[300, 30 , "aspmx.l.google.com."],[300, 40, "aspmx2.googlemail.com."]],
+	    "data":{
 	        
+	        "mx":[[300, 30 , "aspmx.l.google.com."],[300, 40, "aspmx2.googlemail.com."]],
 	        "a" :{
 	            "aniljava.com":[[6522,"127.0.0.1"]],
 	            "www.aniljava.com":[[300,"184.154.161.21"],[600,"184.154.161.22"]],
 	            "*":[[300,"184.154.161.21"]]
 	        },
-	        
 	        "c" :{
-	            "test.aniljava.com":"aniljava.com."
+	            "www.aniljava.com":"aniljava.com."
 	        },
-	        
+	        "txt":{
+	        	"aniljava.com":[300,"v=spf1 mx ~all"],
+	        	"test.aniljava.com":[300,"v=spf1 mx ~all"]
+	        }
+	        ,
 	        "ns":[[163255,"ns1.godaddy.com."],[163255,"ns2.godaddy.com."]]
-	        	        
+	        
 	    }
 	}
 	

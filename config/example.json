@@ -11,6 +11,11 @@
         "c" :{
             "www.aniljava.com":"aniljava.com."
         },
+        "txt":{
+        	"aniljava.com":[300,"v=spf1 mx ~all"],
+        	"test.aniljava.com":[300,"v=spf1 mx ~all"]
+        }
+        ,
         "ns":[[163255,"ns1.godaddy.com."],[163255,"ns2.godaddy.com."]]
         
     }

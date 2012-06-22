@@ -223,10 +223,113 @@ public class DNSServer {
 
 				}
 					break;
-				case "ns":
-					response.put((byte) 3); // 0-000-0011 NAME ERROR
+				case "ns": {
+
+					List<List> authority = (List<List>) getData(zone, "ns");
+
+					if (authority != null && authority.isEmpty()) {
+						error = true;
+						break;
+					}
+
+					response.put((byte) 0); // 0-000-0011 NAME ERROR
+					response.putShort((short) 1); // QDCOUNT
+					response.putShort((short) authority.size()); // ANCOUNT
+					response.putShort((short) 0); // NSCOUNT
+					response.putShort((short) 0); // ARCOUNT
+
+					// NAME RECORD.
+					response.put(qname);
+					response.put(qtype);
+					response.put(qclass);
+
+					for (List auth : authority) {
+
+						response.put((byte) 0xc0);
+						response.put((byte) 0x0c);
+
+						response.putShort((short) 2); // NS
+						response.put(qclass); // IN
+
+						int ttl = (int) auth.get(0);
+						String cname = (String) auth.get(1);
+
+						byte[] cnameQname = domainToQname(cname);
+
+						response.putInt(ttl);
+						response.putShort((short) (cnameQname.length));
+
+						response.put(cnameQname);
+					}
+				}
 					break;
-				case "txt":
+				case "txt": {
+					
+					Map result = (Map) getData(zone, type);
+					if (result == null) {
+						error = true;
+						break;
+					}
+
+					List record = (List) result.get(query);
+					if (record == null || record.isEmpty()) {
+						error = true;
+						break;
+					}
+
+					response.put((byte) 0); // NO ERROR
+					response.putShort((short) 1); // QDCOUNT
+					response.putShort((short) 1); // ANCOUNT
+
+					List<List> authority = (List<List>) getData(zone, "ns");
+					if (authority != null && authority.size() > 0) {
+						response.putShort((short) authority.size()); // NSCOUNT
+					} else {
+						response.putShort((short) 0); // NSCOUNT
+					}
+					
+					response.putShort((short) 0); // ARCOUNT
+
+					// Question Part
+					response.put(qname);
+					response.put(qtype);
+					response.put(qclass);
+
+					response.put((byte) 0xc0);
+					response.put((byte) 0x0c);
+
+					response.put(qtype);// TYPE TXT FROM REQUEST
+					response.putShort((short) 1);// CLASS IN
+
+					int txtttl = (int) record.get(0);
+					String text = (String) record.get(1);
+
+					response.putInt(txtttl);
+					response.putShort((short) (text.length() + 1));
+
+					response.put((byte) text.length());
+					response.put(text.getBytes());
+
+					if (authority != null && !authority.isEmpty()) {
+
+						for (List auth : authority) {
+							response.put(domainToQname(zone + "."));
+							response.putShort((short) 2); // NS
+							response.put(qclass); // IN
+
+							int ttl = (int) auth.get(0);
+							String cname = (String) auth.get(1);
+
+							byte[] cnameQname = domainToQname(cname);
+
+							response.putInt(ttl);
+							response.putShort((short) (cnameQname.length)); // TODO
+
+							response.put(cnameQname);
+						}
+					}
+				}
+
 					response.put((byte) 3); // 0-000-0011 NAME ERROR
 					break;
 				default:
@@ -235,7 +338,7 @@ public class DNSServer {
 				}
 
 				if (error) {
-					response.put((byte) 0); // 0-000-0011 NAME ERROR
+					response.put((byte) 3); // 0-000-0011 NAME ERROR
 					response.putShort((short) 1); // QDCOUNT
 					response.putShort((short) 0); // ANCOUNT
 					response.putShort((short) 0); // NSCOUNT
@@ -250,7 +353,7 @@ public class DNSServer {
 				DatagramPacket responsePacket = new DatagramPacket(response.array(), response.position(), packet.getAddress(), packet.getPort());
 				serverSocket.send(responsePacket);
 			} catch (Exception ex) {
-				//ex.printStackTrace(System.err);
+				// ex.printStackTrace(System.err);
 			}
 		}
 	}
