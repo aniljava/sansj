@@ -46,3 +46,22 @@ Simple Authoritative Name Server - Java
     # sudo java -jar sansj-1.0RC1-jar-with-dependencies.jar <config> <reloadInterval> <port>
     ## DEFAULT IS
     # sudo java -jar sansj-1.0RC1-jar-with-dependencies.jar config 300000 53
+    
+    
+## Suggested Conventions
+    
+1. use **/opt/sansj/** as a root folder and config as a configuration folder inside it.
+2. use a template + sed to create new zone files.
+
+
+
+
+
+
+
+
+
+
+
+
+

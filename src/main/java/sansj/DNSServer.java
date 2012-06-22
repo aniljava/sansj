@@ -88,10 +88,79 @@ public class DNSServer {
 
 					List<List<Object>> ARecords = (List<List<Object>>) result.get(query);
 					if (ARecords == null || ARecords.isEmpty()) {
-						// TODO CHECK CNAME BEFORE THROWING ERROR.
+
+						Map cResult = (Map) getData(zone, "c");
+						if (cResult == null || cResult.isEmpty()) {
+							// TODO Check if A Wildcard exists
+							// TODO if CNAME Wildcard exists
+							error = true;
+							break;
+						} else {
+							List<Object> cname = (List<Object>) cResult.get(query);
+							if (cname != null && !cname.isEmpty()) {
+
+								response.put((byte) 0); // NO ERROR
+								response.putShort((short) 1); // QDCOUNT
+								response.putShort((short) 1); // ANCOUNT
+
+								List<List> authority = (List<List>) getData(zone, "ns");
+								if (authority != null && authority.size() > 0) {
+									response.putShort((short) authority.size()); // NSCOUNT
+								} else {
+									response.putShort((short) 0); // NSCOUNT
+								}
+								response.putShort((short) 0); // ARCOUNT
+
+								// Question Part
+								response.put(qname);
+								response.put(qtype);
+								response.put(qclass);
+
+								{
+									response.put((byte) 0xc0);
+									response.put((byte) 0x0c);
+
+									response.putShort((short) 5);// TYPE CNAME
+									response.putShort((short) 1);// CLASS IN
+
+									int ttl = (int) cname.get(0);
+									String cnameResult = (String) cname.get(1);
+									byte[] cnameQname = domainToQname(cnameResult);
+
+									response.putInt(ttl);
+									response.putShort((short) (cnameQname.length));
+
+									response.put(cnameQname);
+								}
+
+								// AUTH RECORDS
+
+								if (authority != null && !authority.isEmpty()) {
+
+									for (List auth : authority) {
+										response.put(domainToQname(zone + "."));
+										response.putShort((short) 2); // NS
+										response.put(qclass); // IN
+
+										int ttl = (int) auth.get(0);
+										String authcname = (String) auth.get(1);
+
+										byte[] cnameQname = domainToQname(authcname);
+
+										response.putInt(ttl);
+										response.putShort((short) (cnameQname.length));
+
+										response.put(cnameQname);
+									}
+								}
+
+								break;
+							}
+						}
 						error = true;
 						break;
 					}
+
 					response.put((byte) 0); // NO ERROR
 					response.putShort((short) 1); // QDCOUNT
 					response.putShort((short) ARecords.size()); // ANCOUNT
@@ -141,7 +210,7 @@ public class DNSServer {
 							byte[] cnameQname = domainToQname(cname);
 
 							response.putInt(ttl);
-							response.putShort((short) (cnameQname.length)); // TODO
+							response.putShort((short) (cnameQname.length));
 
 							response.put(cnameQname);
 						}
@@ -157,8 +226,7 @@ public class DNSServer {
 						break;
 					}
 
-					response.put((byte) 0); // 0-000-0000 TODO replace last 0000
-											// with error code.
+					response.put((byte) 0);
 
 					response.putShort((short) 1); // QDCOUNT
 					response.putShort((short) mxData.size()); // ANCOUNT
@@ -194,7 +262,7 @@ public class DNSServer {
 
 						response.putInt(ttl);
 
-						response.putShort((short) (cnameQname.length + 2)); // TODO
+						response.putShort((short) (cnameQname.length + 2));
 
 						// byte[] address =
 						// Inet4Address.getByName(ip).getAddress();
@@ -215,7 +283,7 @@ public class DNSServer {
 							byte[] cnameQname = domainToQname(cname);
 
 							response.putInt(ttl);
-							response.putShort((short) (cnameQname.length)); // TODO
+							response.putShort((short) (cnameQname.length)); 
 
 							response.put(cnameQname);
 						}
@@ -264,7 +332,7 @@ public class DNSServer {
 				}
 					break;
 				case "txt": {
-					
+
 					Map result = (Map) getData(zone, type);
 					if (result == null) {
 						error = true;
@@ -287,7 +355,7 @@ public class DNSServer {
 					} else {
 						response.putShort((short) 0); // NSCOUNT
 					}
-					
+
 					response.putShort((short) 0); // ARCOUNT
 
 					// Question Part
@@ -323,7 +391,7 @@ public class DNSServer {
 							byte[] cnameQname = domainToQname(cname);
 
 							response.putInt(ttl);
-							response.putShort((short) (cnameQname.length)); // TODO
+							response.putShort((short) (cnameQname.length));
 
 							response.put(cnameQname);
 						}
@@ -461,6 +529,9 @@ public class DNSServer {
 			break;
 		case 2:
 			qtype = "ns"; // an authoritative name server
+			break;
+		case 5:
+			qtype = "c";
 			break;
 		case 6:
 			qtype = "soa"; // marks the start of a zone of authority
