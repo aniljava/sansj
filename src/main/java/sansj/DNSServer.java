@@ -49,7 +49,8 @@ public class DNSServer {
 		while (true) {
 
 			if (lastUpdated + reloadInterval > System.currentTimeMillis()) {
-				loadDB();
+				lastUpdated = System.currentTimeMillis();
+				loadDB();				
 			}
 
 			try {
